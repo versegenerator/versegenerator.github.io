@@ -5,7 +5,8 @@ export const THEME = {
   verseWeight: 800,
   verseFontRatio: 0.048, // verse font size as a fraction of canvas width, at textScale 1
   verseLineHeightRatio: 1.3,
-  refWeight: 300, // reference line font size matches the verse text (see refPx in computeLayout)
+  refWeight: 300,
+  refFontRatio: 0.62, // reference line font size as a fraction of the verse text size
   refGapRatio: 0.03, // gap between verse block and reference line, as fraction of canvas width
   stripeSidePaddingRatio: 0.04, // horizontal text margin inside the stripe, as fraction of canvas width - independent of vertical padding
   // Wider than the general side padding above - real lock screens (at least
@@ -133,7 +134,7 @@ export function computeLayout(ctx, canvasWidth, canvasHeight, {
   fontFamily = FONT_STACKS.modern.fontFamily,
 }) {
   const versePx = canvasWidth * THEME.verseFontRatio * textScale;
-  const refPx = versePx; // reference line matches the verse text size
+  const refPx = versePx * THEME.refFontRatio;
   const sidePadding = canvasWidth * sidePaddingRatio;
   // Top/bottom padding and the verse-to-reference gap scale with text size
   // too, so the stripe's whitespace stays proportional to the text it holds.

@@ -143,11 +143,12 @@ export async function getVerseText(translation, ref) {
   return capitalizeFirst(stripDanglingPunctuation(parts.join(" ")));
 }
 
+// Translation is intentionally left off - it's not part of the default
+// customize-quote source text, but can still be added manually if wanted.
 export function formatReferenceLabel(ref, translation) {
   const range = ref.verseStart === ref.verseEnd ? `${ref.verseStart}` : `${ref.verseStart}-${ref.verseEnd}`;
   const bookName = translation === "schlachter" ? ref.book.de : ref.book.kjv;
-  const label = translation === "schlachter" ? schlachterMeta().label : SOURCES[translation].label;
-  return `${bookName} ${ref.chapter}:${range} (${label})`;
+  return `${bookName} ${ref.chapter}:${range}`;
 }
 
 // Rewrites a resolved reference into its short form (e.g. "Mat 17:27" or,

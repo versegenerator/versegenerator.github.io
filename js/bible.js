@@ -1,40 +1,12 @@
-import { BOOKS, findBook, shortBookLabel } from "./books.js";
+import { findBook, shortBookLabel } from "./books.js";
 
-// Schlachter 2000 is copyrighted and only vendored locally (gitignored, see
-// .gitignore) - it won't exist on the public deploy. Schlachter 1951 is a
-// "free non-commercial distribution" edition, committed, and used as the
-// public fallback. Resolved once (see resolveSchlachterEdition) so the rest
-// of the app can treat "schlachter" as a single translation whose exact
-// edition depends on what's actually available.
-const SCHLACHTER_2000_URL = "data/schlachter2000.json";
-const SCHLACHTER_1951_URL = "data/schlachter1951.json";
-let schlachterEdition = null; // "2000" | "1951", set by resolveSchlachterEdition
-
-async function resolveSchlachterEdition() {
-  if (schlachterEdition) return schlachterEdition;
-  try {
-    const res = await fetch(SCHLACHTER_2000_URL, { method: "HEAD" });
-    schlachterEdition = res.ok ? "2000" : "1951";
-  } catch {
-    schlachterEdition = "1951";
-  }
-  return schlachterEdition;
-}
-
-function schlachterMeta() {
-  return schlachterEdition === "2000"
-    ? { label: "Schlachter 2000", fileCode: "sch2000" }
-    : { label: "Schlachter 1951", fileCode: "sch1951" };
-}
-
-// Returns the resolved Schlachter edition's display label, or a generic
-// placeholder if it hasn't been resolved yet (before the first fetch).
-export function getSchlachterLabel() {
-  return schlachterEdition ? schlachterMeta().label : "Schlachter";
-}
+// Schlachter 2000 is now licensed for public use here and vendored directly
+// (see README) - required attribution, drawn onto the card whenever this
+// translation is selected (see cardParams/renderCard).
+export const SCHLACHTER_ATTRIBUTION = "Version Schlachter 2000 © Genfer Bibelgesellschaft";
 
 const SOURCES = {
-  schlachter: { lang: "de" }, // label/fileCode resolved dynamically via schlachterMeta()
+  schlachter: { url: "data/schlachter2000.json", label: "Schlachter 2000", lang: "de", fileCode: "sch2000" },
   kjv: { url: "data/kjv.json", label: "KJV", lang: "en", fileCode: "kjv" },
 };
 
@@ -59,9 +31,7 @@ export function parseReference(input) {
 }
 
 async function loadTranslation(translation) {
-  const url = translation === "schlachter"
-    ? ((await resolveSchlachterEdition()) === "2000" ? SCHLACHTER_2000_URL : SCHLACHTER_1951_URL)
-    : SOURCES[translation].url;
+  const url = SOURCES[translation].url;
   if (cache.has(url)) return cache.get(url);
   const res = await fetch(url);
   if (!res.ok) throw new Error(`Failed to load ${translation} data (${res.status})`);
@@ -86,29 +56,15 @@ function cleanKjvText(text) {
 // end of a word or closing punctuation with no space, e.g. "Denken«.b" or
 // "[sehr]a hat" - sequential a, b, c... per chapter. Strip the letter first
 // (while "]" is still there to anchor case (2)), then the brackets.
-function cleanSchlachter2000Text(text) {
+function cleanSchlachterText(text) {
   return text
     .replace(/([.!?:;,»«)\]])([a-z])(?=[\s.,;:!?)]|$)/g, "$1")
     .replace(/\[([^\]]*)\]/g, "$1");
 }
 
-function lookupSchlachter2000Verse(data, book, chapter, verse) {
-  const text = data.bible?.[book.schlachter]?.[String(chapter)]?.[String(verse)];
-  return text ? cleanSchlachter2000Text(text) : null;
-}
-
-// 1951 source: array of 66 books (same canonical order as BOOKS), each
-// { chapters: [[verse1, verse2, ...], ...] }, positionally indexed (no
-// verse-number keys) - plain text, nothing to clean.
-function lookupSchlachter1951Verse(data, book, chapter, verse) {
-  const bookIndex = BOOKS.indexOf(book);
-  return data[bookIndex]?.chapters?.[chapter - 1]?.[verse - 1] ?? null;
-}
-
 function lookupSchlachterVerse(data, book, chapter, verse) {
-  return schlachterEdition === "2000"
-    ? lookupSchlachter2000Verse(data, book, chapter, verse)
-    : lookupSchlachter1951Verse(data, book, chapter, verse);
+  const text = data.bible?.[book.schlachter]?.[String(chapter)]?.[String(verse)];
+  return text ? cleanSchlachterText(text) : null;
 }
 
 function lookupKjvVerse(data, book, chapter, verse) {
@@ -164,8 +120,8 @@ export function formatShortReference(ref, translation) {
 export function formatFileName(ref, translation, size) {
   const bookCode = ref.book.id.replace(/[A-Za-z]+/, (m) => m[0] + m.slice(1).toLowerCase());
   const verseRange = ref.verseStart === ref.verseEnd ? `${ref.verseStart}` : `${ref.verseStart}-${ref.verseEnd}`;
-  const source = translation === "schlachter" ? schlachterMeta() : SOURCES[translation];
-  return `${bookCode}-${ref.chapter}-${verseRange}-${source.fileCode}-versgenerator-${SOURCES[translation].lang}-${size}`;
+  const source = SOURCES[translation];
+  return `${bookCode}-${ref.chapter}-${verseRange}-${source.fileCode}-versgenerator-${source.lang}-${size}`;
 }
 
 export const TRANSLATIONS = SOURCES;

@@ -1,6 +1,6 @@
-import { parseReference, getVerseText, formatReferenceLabel, formatShortReference, formatFileName, getSchlachterLabel } from "./bible.js";
+import { parseReference, getVerseText, formatReferenceLabel, formatShortReference, formatFileName, SCHLACHTER_ATTRIBUTION } from "./bible.js";
 import { nextPhoto, peekNextPhoto } from "./photos.js";
-import { renderCard, ASPECT_RATIOS, THEME, WALLPAPER_SAFE_ZONE, FONT_STACKS } from "./canvas.js";
+import { renderCard, computeLayout, ASPECT_RATIOS, THEME, WALLPAPER_SAFE_ZONE, FONT_STACKS } from "./canvas.js";
 import {
   renderPhoneIcon, renderReloadIcon, renderMountainIcon, renderWaterDropIcon,
   renderColorWheelIcon, renderHalfCircleIcon, renderMinusIcon, renderPlusIcon,
@@ -44,6 +44,14 @@ const state = {
   // "Customize quote" panel (see applyResolvedVerse, wireCustomizeQuote).
   quoteText: saved.quoteText ?? "",
   sourceText: saved.sourceText ?? "",
+  // The Bible-translation credit only (the photo credit is separate and
+  // never editable - see photoCreditText/combinedCreditLine). Mirrors
+  // bibleCreditBaseline automatically; only diverges once the "Bible
+  // credit" field is edited, which only appears once the quote/source is
+  // itself customized (see updateCreditField) - meant for fixing/removing
+  // the attribution when the customized text is no longer actually from
+  // Schlachter 2000.
+  creditText: saved.creditText ?? "",
   image: null,
   focalPoint: saved.focalPoint ?? { x: 50, y: 50 },
   zoom: saved.zoom ?? THEME.defaultZoom,
@@ -81,6 +89,7 @@ function saveSettings() {
     photoCredit: state.photoCredit,
     quoteText: state.quoteText,
     sourceText: state.sourceText,
+    creditText: state.creditText,
   }));
 }
 
@@ -107,6 +116,8 @@ const el = {
   customizePanel: document.getElementById("customize-quote-panel"),
   customizeQuoteInput: document.getElementById("customize-quote-text"),
   customizeSourceInput: document.getElementById("customize-quote-source"),
+  customizeCreditRow: document.getElementById("customize-credit-row"),
+  customizeCreditInput: document.getElementById("customize-quote-credit"),
   mobileRefGroup: document.getElementById("mobile-ref-group"),
   canvas: document.getElementById("preview-canvas"),
   saveStandardRow: document.getElementById("save-standard"),
@@ -181,13 +192,55 @@ function showError(node, message) {
   node.hidden = false;
 }
 
+function isQuoteCustomized() {
+  return state.quoteText !== state.verseText || state.sourceText !== state.refLabel;
+}
+
 // Dims the reference input / translation controls while a custom quote or
 // source is active, signaling they're no longer what's driving the card.
 function updateCustomizedDimming() {
-  const customized = state.quoteText !== state.verseText || state.sourceText !== state.refLabel;
+  const customized = isQuoteCustomized();
   el.refInput.classList.toggle("dims-when-customized", customized);
   el.translationSelect.classList.toggle("dims-when-customized", customized);
   el.mobileRefGroup.classList.toggle("dims-when-customized", customized);
+}
+
+// The Bible-translation credit - required attribution when Schlachter 2000
+// is active (see SCHLACHTER_ATTRIBUTION in bible.js), empty otherwise. Only
+// this part is user-editable (see updateCreditField) - the photo credit
+// (state.photoCreditText) is never edited, it's always auto-derived.
+function bibleCreditBaseline() {
+  return state.translation === "schlachter" ? SCHLACHTER_ATTRIBUTION : "";
+}
+
+// The card's single-line watermark: fixed photo credit plus the (possibly
+// user-edited) Bible credit.
+function combinedCreditLine() {
+  return [state.photoCreditText, state.creditText].filter(Boolean).join(" · ");
+}
+
+// The "Bible credit" field only appears once the quote/source has been
+// customized - it exists to fix up or remove the auto-attached translation
+// attribution when the customized text no longer matches what's actually
+// shown (e.g. a different translation pasted into the quote). The photo
+// credit itself is never editable. While hidden, creditText continuously
+// mirrors the live baseline so it's never stale by the time the field
+// reappears.
+function updateCreditField() {
+  const customized = isQuoteCustomized();
+  if (!customized) {
+    state.creditText = bibleCreditBaseline();
+  } else {
+    // Migrates creditText persisted before the Bible-credit field was
+    // scoped down from the full combined line to just this part - strip a
+    // leading photo-credit prefix if one's still there.
+    const oldPrefix = state.photoCreditText ? `${state.photoCreditText} · ` : "";
+    if (oldPrefix && state.creditText.startsWith(oldPrefix)) {
+      state.creditText = state.creditText.slice(oldPrefix.length);
+    }
+  }
+  el.customizeCreditRow.hidden = !customized;
+  if (!el.customizePanel.hidden) el.customizeCreditInput.value = state.creditText;
 }
 
 // Updates the auto-derived verse baseline (verseText/refLabel) and syncs
@@ -213,6 +266,7 @@ function applyResolvedVerse(text, refLabel) {
     el.customizeSourceInput.value = state.sourceText;
   }
   updateCustomizedDimming();
+  updateCreditField();
 }
 
 // "Customize quote": an inline panel below the photo credit line, toggled
@@ -220,7 +274,10 @@ function applyResolvedVerse(text, refLabel) {
 // currently shown (state.quoteText/sourceText); editing either field
 // overrides the card directly (see cardParams) and dims the reference
 // controls (see updateCustomizedDimming) until a new reference or
-// translation resolves and resets it (see applyResolvedVerse).
+// translation resolves and resets it (see applyResolvedVerse). The "Credit"
+// field only shows up once quote/source is customized (see
+// updateCreditField) - it's there to fix the credit watermark if the
+// customized text is no longer actually from Schlachter 2000.
 function wireCustomizeQuote() {
   el.customizeToggle.addEventListener("click", () => {
     const opening = el.customizePanel.hidden;
@@ -228,18 +285,26 @@ function wireCustomizeQuote() {
     if (opening) {
       el.customizeQuoteInput.value = state.quoteText;
       el.customizeSourceInput.value = state.sourceText;
+      el.customizeCreditInput.value = state.creditText;
     }
   });
 
-  const onEdit = () => {
+  const onTextEdit = () => {
     state.quoteText = el.customizeQuoteInput.value;
     state.sourceText = el.customizeSourceInput.value;
     updateCustomizedDimming();
+    updateCreditField();
     render();
     saveSettings();
   };
-  el.customizeQuoteInput.addEventListener("input", onEdit);
-  el.customizeSourceInput.addEventListener("input", onEdit);
+  el.customizeQuoteInput.addEventListener("input", onTextEdit);
+  el.customizeSourceInput.addEventListener("input", onTextEdit);
+
+  el.customizeCreditInput.addEventListener("input", () => {
+    state.creditText = el.customizeCreditInput.value;
+    render();
+    saveSettings();
+  });
 }
 
 function currentRatio() {
@@ -266,12 +331,13 @@ function cardParams() {
     textScale: state.textScale,
     stripeBottomRatio: state.stripeBottomRatio,
     sidePaddingRatio: state.aspectKey === "wallpaper" ? THEME.wallpaperSidePaddingRatio : undefined,
-    credit: state.photoCreditText,
+    credit: combinedCreditLine(),
   };
 }
 
 function render() {
   if (!state.image || !state.quoteText) return;
+  enforceSchlachterTextCap();
   lastLayout = renderCard(ctx, el.canvas.width, el.canvas.height, cardParams());
 }
 
@@ -287,7 +353,7 @@ function loadImage(url) {
 
 // `credit` is { name, link } (link may be null - see photos.js) or null for
 // a locally uploaded photo (no attribution to show). Builds both the DOM
-// credit line and the plain-text watermark drawn onto the canvas.
+// credit line and the plain-text watermark baseline drawn onto the canvas.
 async function applyPhoto(image, credit, { resetFraming = true } = {}) {
   state.image = image;
   if (resetFraming) {
@@ -308,6 +374,7 @@ async function applyPhoto(image, credit, { resetFraming = true } = {}) {
     el.photoCredit.innerHTML = "";
     state.photoCreditText = "";
   }
+  updateCreditField();
   render();
 }
 
@@ -398,13 +465,6 @@ async function updateVerse() {
     const shortRef = formatShortReference(ref, state.translation);
     el.refInput.value = shortRef;
     el.mobileRefInput.value = shortRef;
-    if (state.translation === "schlachter") {
-      // Reflects whichever edition actually loaded (2000 locally, 1951 on
-      // the public deploy where 2000 is gitignored) once it's known.
-      const label = getSchlachterLabel();
-      el.translationSelect.querySelector('option[value="schlachter"]').textContent = label;
-      el.mobileTranslationSelect.querySelector('option[value="schlachter"]').textContent = label;
-    }
     render();
   } catch (err) {
     showError(el.refError, "Couldn't load Bible data.");
@@ -619,6 +679,52 @@ function setZoom(percent, { showThirds = true } = {}) {
   el.zoomSlider.value = clamped;
   if (showThirds) showGrid();
   render();
+  saveSettings();
+}
+
+// Schlachter 2000's license caps how much of the image the quoted text may
+// cover (see THEME.schlachterMaxStripeHeightRatio) - finds the largest
+// text-size percent whose stripe still fits that limit, for the current
+// canvas size and quote text. Binary search: stripe height only grows (or
+// plateaus) as text size increases, so it's safe despite the discrete jumps
+// each time a line wraps.
+function maxTextScaleForStripeLimit() {
+  const canvasWidth = el.canvas.width;
+  const canvasHeight = el.canvas.height;
+  const sidePaddingRatio = state.aspectKey === "wallpaper" ? THEME.wallpaperSidePaddingRatio : undefined;
+  const fits = (percent) => {
+    const layout = computeLayout(ctx, canvasWidth, canvasHeight, {
+      verseText: state.quoteText,
+      textScale: percent / 100,
+      stripeBottomRatio: state.stripeBottomRatio,
+      sidePaddingRatio,
+      fontFamily: FONT_STACKS[state.fontStyle].fontFamily,
+    });
+    return layout.stripeHeight <= canvasHeight * THEME.schlachterMaxStripeHeightRatio;
+  };
+  const lo = Math.round(THEME.minTextScale * 100);
+  const hi = Math.round(THEME.maxTextScale * 100);
+  if (fits(hi)) return hi;
+  if (!fits(lo)) return lo;
+  let low = lo, high = hi;
+  while (low < high) {
+    const mid = Math.ceil((low + high) / 2);
+    if (fits(mid)) low = mid; else high = mid - 1;
+  }
+  return low;
+}
+
+// Called from render() itself (see above) so the cap holds no matter what
+// triggered the redraw - a text-size tap, a longer customized quote, a
+// font/aspect switch, or choosing Schlachter as the translation - not just
+// direct interaction with the text-size control.
+function enforceSchlachterTextCap() {
+  if (state.translation !== "schlachter") return;
+  const maxPercent = maxTextScaleForStripeLimit();
+  const currentPercent = Math.round(state.textScale * 100);
+  if (currentPercent <= maxPercent) return;
+  state.textScale = maxPercent / 100;
+  el.textSizeSlider.value = maxPercent;
   saveSettings();
 }
 

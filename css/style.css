@@ -258,6 +258,16 @@ button:hover {
   resize: vertical;
 }
 
+.customize-credit-row {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.customize-credit-row[hidden] {
+  display: none;
+}
+
 /* The verse reference / translation controls fade out while a custom
    quote/source is active, signaling they're no longer what's driving the
    card - typing a new reference (or switching translation) still works and

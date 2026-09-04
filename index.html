@@ -66,6 +66,14 @@
           <textarea id="customize-quote-text" rows="5"></textarea>
           <label for="customize-quote-source">Source</label>
           <input id="customize-quote-source" type="text" />
+          <!-- Only shown once the quote/source above is customized (see
+               updateCreditField in main.js) - lets a pasted-in different
+               translation's text have its Schlachter attribution fixed or
+               removed. Photo credit is separate and never editable. -->
+          <div id="customize-credit-row" class="customize-credit-row" hidden>
+            <label for="customize-quote-credit">Bible credit</label>
+            <input id="customize-quote-credit" type="text" />
+          </div>
         </div>
         <input id="upload-input" type="file" accept="image/*" hidden />
       </section>

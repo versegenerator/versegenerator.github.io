@@ -19,8 +19,10 @@ Then open http://localhost:8080.
 ## Data
 
 - `data/schlachter2000.json` — vendored from
-  [afknapping/Schlachter2000-json](https://github.com/afknapping/Schlachter2000-json).
-  For private use only (Schlachter 2000 text is copyrighted).
+  [afknapping/Schlachter2000-json](https://github.com/afknapping/Schlachter2000-json),
+  licensed for use here. Required attribution ("Version Schlachter 2000 ©
+  Genfer Bibelgesellschaft") is drawn onto every card that uses it — see
+  `SCHLACHTER_ATTRIBUTION` in `js/bible.js`.
 - `data/kjv.json` — vendored from
   [farskipper/kjv](https://github.com/farskipper/kjv) (public domain).
 - `data/mountain/`, `data/water/` — local photo folders (no API, no key).

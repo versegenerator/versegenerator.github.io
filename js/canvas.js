@@ -33,6 +33,11 @@ export const THEME = {
   creditFontRatio: 0.016,
   creditBottomMarginRatio: 0.016,
   creditOpacity: 0.55,
+  // Schlachter 2000's license caps how much of the image the quoted text may
+  // cover - enforced as a hard ceiling on the text-size control (see
+  // setTextScale in main.js), not an auto-shrink, so it never silently
+  // resizes text the user already chose.
+  schlachterMaxStripeHeightRatio: 0.5,
 };
 
 // Silvertone's grayscale/contrast/brightness look, expressed as constants
@@ -211,7 +216,9 @@ export function renderCard(ctx, canvasWidth, canvasHeight, {
   // Photo credit watermark - tiny, translucent, bottom-center of the image.
   // Fixed to the canvas edge (not stripe-aware): if the stripe is dragged
   // all the way to the bottom it can cover this, which is an accepted
-  // trade-off of a fixed bottom-center placement.
+  // trade-off of a fixed bottom-center placement. A single line - when a
+  // translation attribution applies, it's already folded into `credit` by
+  // the caller (see combinedCreditBaseline in main.js).
   if (credit) {
     const creditPx = canvasWidth * THEME.creditFontRatio;
     const creditY = canvasHeight - canvasWidth * THEME.creditBottomMarginRatio;

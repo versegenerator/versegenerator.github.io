@@ -2,7 +2,7 @@ import { parseReference, getVerseText, formatReferenceLabel, formatShortReferenc
 import { nextPhoto, peekNextPhoto } from "./photos.js";
 import { renderCard, computeLayout, ASPECT_RATIOS, THEME, WALLPAPER_SAFE_ZONE, FONT_STACKS } from "./canvas.js";
 import {
-  renderPhoneIcon, renderReloadIcon, renderMountainIcon, renderWaterDropIcon,
+  renderReloadIcon, renderMountainIcon, renderWaterDropIcon,
   renderColorWheelIcon, renderHalfCircleIcon, renderMinusIcon, renderPlusIcon,
   renderZoomOutIcon, renderZoomInIcon, renderChevronDownIcon, renderDownloadIcon,
 } from "./icons.js";
@@ -105,7 +105,7 @@ const el = {
   filterButtons: document.getElementById("filter-buttons"),
   sourceButtons: document.getElementById("source-buttons"),
   uploadInput: document.getElementById("upload-input"),
-  aspectButtons: document.getElementById("aspect-buttons"),
+  aspectSelect: document.getElementById("aspect-select"),
   textThemeButtons: document.getElementById("text-theme-buttons"),
   fontButtons: document.getElementById("font-buttons"),
   zoomSlider: document.getElementById("zoom-slider"),
@@ -509,36 +509,6 @@ function buildToggleGroup(container, options, selectedKey, onSelect, { renderIco
   }
 }
 
-// Deliberately not a uniform formula: 3:4 is the reference (height = BOX,
-// width = SMALL); 4:3 is its transpose (same footprint, rotated); 1:1's
-// side is SMALL (3:4's narrow edge); 16:9 keeps 3:4's *height* instead of
-// fitting the same box, so it reads as visibly wider/larger than the rest.
-const ASPECT_SWATCH_BOX = 12; // 3:4 height, 4:3 width
-const ASPECT_SWATCH_SMALL = Math.round((ASPECT_SWATCH_BOX * 3) / 4); // 3:4 width, 4:3 height, 1:1 side
-
-const ASPECT_SWATCH_SIZES = {
-  portrait: { width: ASPECT_SWATCH_SMALL, height: ASPECT_SWATCH_BOX },
-  square: { width: ASPECT_SWATCH_SMALL, height: ASPECT_SWATCH_SMALL },
-  landscape: { width: ASPECT_SWATCH_BOX, height: ASPECT_SWATCH_SMALL },
-  wide: { width: Math.round((ASPECT_SWATCH_BOX * 16) / 9), height: ASPECT_SWATCH_BOX },
-};
-
-function renderAspectSwatch(opt) {
-  const { width, height } = ASPECT_SWATCH_SIZES[opt.key];
-  const swatch = document.createElement("span");
-  swatch.className = "aspect-swatch";
-  swatch.style.width = `${width}px`;
-  swatch.style.height = `${height}px`;
-  swatch.setAttribute("aria-hidden", "true");
-  return swatch;
-}
-
-// Phone wallpaper mode shows a fixed phone icon instead of a proportion
-// swatch - a 9:18 rectangle wouldn't read as meaningfully different from
-// 3:4 at this size, so a recognizable glyph communicates it faster.
-function renderAspectIcon(opt) {
-  return opt.key === "wallpaper" ? renderPhoneIcon() : renderAspectSwatch(opt);
-}
 
 function updateWallpaperSafeZoneVisibility() {
   el.wallpaperSafeOverlay.hidden = state.aspectKey !== "wallpaper";
@@ -578,13 +548,8 @@ function selectAspect(key) {
   updateMobileSaveMenu();
   render();
   saveSettings();
-  buildAspectButtons();
+  el.aspectSelect.value = key;
   el.mobileAspectSelect.value = key;
-}
-
-function buildAspectButtons() {
-  const options = Object.entries(ASPECT_RATIOS).map(([key, ratio]) => ({ key, label: ratio.label, ratio }));
-  buildToggleGroup(el.aspectButtons, options, state.aspectKey, selectAspect, { renderIcon: renderAspectIcon });
 }
 
 function setFilter(isBw) {
@@ -898,26 +863,27 @@ function buildMobileRow3() {
   el.mobileTextsizeGroup.appendChild(buildTextSizeStepper());
 }
 
-// Unicode glyphs standing in for the desktop's proportion swatches - a
-// native <select>'s options can only hold plain text, not SVG/DOM icons.
-const MOBILE_ASPECT_GLYPHS = {
+// Unicode glyphs standing in for a proportion swatch - a native <select>'s
+// options can only hold plain text, not SVG/DOM icons. Used on both the
+// desktop and mobile aspect-ratio dropdowns.
+const ASPECT_GLYPHS = {
   portrait: "▯",
   square: "□",
   landscape: "▭",
   wide: "▬",
 };
 
-function buildMobileAspectSelect() {
-  el.mobileAspectSelect.innerHTML = "";
+function buildAspectSelect(selectEl) {
+  selectEl.innerHTML = "";
   for (const [key, ratio] of Object.entries(ASPECT_RATIOS)) {
     const opt = document.createElement("option");
     opt.value = key;
-    const glyph = MOBILE_ASPECT_GLYPHS[key];
+    const glyph = ASPECT_GLYPHS[key];
     opt.textContent = glyph ? `${glyph} ${ratio.label}` : ratio.label;
-    el.mobileAspectSelect.appendChild(opt);
+    selectEl.appendChild(opt);
   }
-  el.mobileAspectSelect.value = state.aspectKey;
-  el.mobileAspectSelect.addEventListener("change", () => selectAspect(el.mobileAspectSelect.value));
+  selectEl.value = state.aspectKey;
+  selectEl.addEventListener("change", () => selectAspect(selectEl.value));
 }
 
 // Mirrors updateSaveRowVisibility's per-ratio logic, just expressed as one
@@ -1196,8 +1162,8 @@ async function init() {
   el.textSizeSlider.value = Math.round(state.textScale * 100);
 
   resizePreviewCanvas();
-  buildAspectButtons();
-  buildMobileAspectSelect();
+  buildAspectSelect(el.aspectSelect);
+  buildAspectSelect(el.mobileAspectSelect);
   buildFilterButtons();
   buildSourceButtons();
   buildTextThemeButtons();

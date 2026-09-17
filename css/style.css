@@ -56,16 +56,6 @@ body {
   padding: var(--side-padding);
   border-radius: 12px;
   transition: opacity 0.4s ease;
-  /* Capped and internally scrollable (rather than letting the whole page
-     grow taller than the viewport) so the preview never has to move to
-     keep the panel's later content reachable. dvh (not vh) matters on iOS
-     Safari specifically: vh is pinned to the viewport with the address/tab
-     bar collapsed, so while it's showing the panel's box is taller than
-     what's actually visible and scrolling can't reach the last bit of
-     content - dvh tracks the real, current visible height instead. */
-  max-height: 100vh;
-  max-height: 100dvh;
-  overflow-y: auto;
 }
 
 /* Everything below the hide/show settings toggle - needs its own gap since
@@ -188,14 +178,6 @@ button:hover {
   background: var(--accent);
   color: #fff;
   font-weight: 800;
-}
-
-.aspect-swatch {
-  display: inline-block;
-  border: 1.5px solid currentColor;
-  border-radius: 1px;
-  box-sizing: border-box;
-  flex-shrink: 0;
 }
 
 .error {

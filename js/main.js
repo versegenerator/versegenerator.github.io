@@ -34,7 +34,7 @@ const saved = loadSettings();
 
 const state = {
   ref: null,
-  translation: saved.translation ?? "schlachter",
+  translation: saved.translation ?? "kjv",
   // null (not "") marks "not resolved yet this session" - distinct from a
   // legitimately empty lookup - see applyResolvedVerse's isFirstResolve.
   verseText: null,

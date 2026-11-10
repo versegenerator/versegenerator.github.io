@@ -52,6 +52,10 @@ const state = {
   // the attribution when the customized text is no longer actually from
   // Schlachter 2000.
   creditText: saved.creditText ?? "",
+  // Direct image URL typed into the customize panel - when set, it's
+  // shown instead of the regular mountain/water photo (which
+  // stays in photoUrl/photoCredit so clearing the field can restore it).
+  customPhotoUrl: saved.customPhotoUrl ?? "",
   image: null,
   focalPoint: saved.focalPoint ?? { x: 50, y: 50 },
   zoom: saved.zoom ?? THEME.defaultZoom,
@@ -90,6 +94,7 @@ function saveSettings() {
     quoteText: state.quoteText,
     sourceText: state.sourceText,
     creditText: state.creditText,
+    customPhotoUrl: state.customPhotoUrl,
   }));
 }
 
@@ -118,6 +123,8 @@ const el = {
   customizeSourceInput: document.getElementById("customize-quote-source"),
   customizeCreditRow: document.getElementById("customize-credit-row"),
   customizeCreditInput: document.getElementById("customize-quote-credit"),
+  customizePhotoUrlInput: document.getElementById("customize-photo-url"),
+  customizePhotoError: document.getElementById("customize-photo-error"),
   mobileRefGroup: document.getElementById("mobile-ref-group"),
   canvas: document.getElementById("preview-canvas"),
   saveStandardRow: document.getElementById("save-standard"),
@@ -305,6 +312,12 @@ function wireCustomizeQuote() {
     render();
     saveSettings();
   });
+
+  let photoUrlTimer;
+  el.customizePhotoUrlInput.addEventListener("input", () => {
+    clearTimeout(photoUrlTimer);
+    photoUrlTimer = setTimeout(() => applyCustomPhotoUrl(el.customizePhotoUrlInput.value), 400);
+  });
 }
 
 function currentRatio() {
@@ -434,6 +447,89 @@ async function restorePhoto(source, url, credit) {
     prefetchNext(source);
   } catch {
     loadPhotoForSource(source);
+  }
+}
+
+// Any direct https image link works, provided its host sends CORS headers
+// (images are requested with crossOrigin="anonymous" so the canvas stays
+// exportable - hosts without them simply fail to load). Page links, e.g.
+// unsplash.com/photos/..., aren't images and can't be resolved from the
+// browser.
+let customPhotoRequest = 0; // guards against out-of-order async loads
+
+function validateCustomPhotoUrl(raw) {
+  let parsed;
+  try {
+    parsed = new URL(raw);
+  } catch {
+    return "That doesn't look like a valid URL.";
+  }
+  if (parsed.protocol !== "https:") return "The URL must start with https://.";
+  if (parsed.hostname === "unsplash.com" || parsed.hostname === "www.unsplash.com") {
+    return "That's an Unsplash page link, not an image. On Unsplash, right-click the photo and choose \"Copy image address\".";
+  }
+  return null;
+}
+
+// Dims the regular photo-source buttons while a custom URL drives the image,
+// same signal as the dimmed reference controls for a customized quote.
+function updatePhotoDimming() {
+  const active = Boolean(state.customPhotoUrl);
+  el.sourceButtons.classList.toggle("dims-when-customized", active);
+  el.mobileSourceGroup.classList.toggle("dims-when-customized", active);
+}
+
+// Drops the custom photo (if any) without touching the displayed image -
+// callers are about to load a different one anyway.
+function clearCustomPhoto() {
+  customPhotoRequest++;
+  state.customPhotoUrl = "";
+  el.customizePhotoUrlInput.value = "";
+  showError(el.customizePhotoError, "");
+  updatePhotoDimming();
+}
+
+// Returns true if the custom image is now showing. The photographer isn't
+// recoverable from an image URL, so no photo credit is shown for it.
+async function applyCustomPhotoUrl(raw, { restoring = false } = {}) {
+  const url = raw.trim();
+  const request = ++customPhotoRequest;
+
+  if (!url) {
+    const hadCustom = Boolean(state.customPhotoUrl);
+    state.customPhotoUrl = "";
+    showError(el.customizePhotoError, "");
+    updatePhotoDimming();
+    saveSettings();
+    if (hadCustom) {
+      // Back to the regular photo that was showing before.
+      try {
+        const image = await loadImage(state.photoUrl);
+        if (request === customPhotoRequest) await applyPhoto(image, state.photoCredit);
+      } catch {
+        if (request === customPhotoRequest) loadPhotoForSource(state.imageSource);
+      }
+    }
+    return false;
+  }
+
+  const problem = validateCustomPhotoUrl(url);
+  if (problem) {
+    showError(el.customizePhotoError, problem);
+    return false;
+  }
+  try {
+    const image = await loadImage(url);
+    if (request !== customPhotoRequest) return false;
+    state.customPhotoUrl = url;
+    showError(el.customizePhotoError, "");
+    updatePhotoDimming();
+    await applyPhoto(image, null, { resetFraming: !restoring });
+    saveSettings();
+    return true;
+  } catch {
+    if (request === customPhotoRequest) showError(el.customizePhotoError, "Couldn't load an image from that URL. It must be a direct image link, and the site has to allow use from other pages (CORS).");
+    return false;
   }
 }
 
@@ -575,6 +671,7 @@ function buildFilterButtons() {
 // aria-pressed) so the reload icon - see buildSourceButtons - relocates to
 // whichever button is now selected, on both desktop and mobile.
 function selectSource(key, { loadPhoto = true } = {}) {
+  clearCustomPhoto();
   state.imageSource = key;
   buildSourceButtons();
   buildMobileRow2();
@@ -684,7 +781,10 @@ function maxTextScaleForStripeLimit() {
 // font/aspect switch, or choosing Schlachter as the translation - not just
 // direct interaction with the text-size control.
 function enforceSchlachterTextCap() {
-  if (state.translation !== "schlachter") return;
+  // Tied to the Bible credit, not just the translation dropdown: once it's
+  // been removed/replaced (customized text from another translation), the
+  // Schlachter license no longer applies to what's on the card.
+  if (!/schlachter/i.test(state.creditText)) return;
   const maxPercent = maxTextScaleForStripeLimit();
   const currentPercent = Math.round(state.textScale * 100);
   if (currentPercent <= maxPercent) return;
@@ -868,6 +968,8 @@ function buildMobileRow3() {
 // desktop and mobile aspect-ratio dropdowns.
 const ASPECT_GLYPHS = {
   portrait: "▯",
+  film: "▯",
+  filmLandscape: "▭",
   square: "□",
   landscape: "▭",
   wide: "▬",
@@ -1130,7 +1232,13 @@ function wireEvents() {
   wireCustomizeQuote();
 }
 
-function loadInitialPhoto() {
+async function loadInitialPhoto() {
+  if (state.customPhotoUrl) {
+    el.customizePhotoUrlInput.value = state.customPhotoUrl;
+    if (await applyCustomPhotoUrl(state.customPhotoUrl, { restoring: true })) return;
+    // No longer loads (link expired, offline) - fall back to the regular photo.
+    clearCustomPhoto();
+  }
   // "upload" has nothing to restore - wait for a dropped file.
   if (state.imageSource === "upload") return;
   if (state.photoUrl) return restorePhoto(state.imageSource, state.photoUrl, state.photoCredit);

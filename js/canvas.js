@@ -58,9 +58,11 @@ export const FONT_STACKS = {
 };
 
 export const ASPECT_RATIOS = {
-  portrait: { label: "Portrait 3:4", w: 3, h: 4 },
+  portrait: { label: "DIN Portrait 3:4", w: 3, h: 4 },
+  landscape: { label: "DIN Landscape 4:3", w: 4, h: 3 },
+  film: { label: "35mm Portrait 2:3", w: 2, h: 3 },
+  filmLandscape: { label: "35mm Landscape 3:2", w: 3, h: 2 },
   square: { label: "Square 1:1", w: 1, h: 1 },
-  landscape: { label: "Landscape 4:3", w: 4, h: 3 },
   wide: { label: "Widescreen 16:9", w: 16, h: 9 },
   // Taller than any current mainstream phone (modern iPhones/Androids top
   // out around 19.5:9-21:9) so cover-fit is always width-constrained: full
